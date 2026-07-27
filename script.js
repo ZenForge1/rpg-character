@@ -128,7 +128,7 @@ function getCharacterFromName(name, lang = currentLang) {
   return { name: displayName, race, class: cls, weapon, ability, stats, quote };
 }
 
-// ==================== РИСОВАНИЕ КАРТОЧКИ (полная версия) ====================
+// ==================== РИСОВАНИЕ КАРТОЧКИ ====================
 function drawCharacterCard(canvas, char, lang = currentLang, isLegendary = false) {
   const ctx = canvas.getContext('2d');
   const w = canvas.width, h = canvas.height;
@@ -258,7 +258,7 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y); ctx.closePath();
 }
 
-// ==================== БИТВА (АНИМАЦИЯ) ====================
+// ==================== БИТВА (ИСПРАВЛЕННАЯ) ====================
 function generateEnemy() {
   const names = ['Теневой Воин','Ледяной Маг','Кровавый Рыцарь','Призрачный Вор','Огненный Дракон','Стальной Голем','Лунный Эльф'];
   const name = names[Math.floor(Math.random()*names.length)];
@@ -273,8 +273,8 @@ function generateEnemy() {
 
 function simulateBattle(player, enemy) {
   const log = [];
-  let pHP = 100, eHP = 100, round = 1;
-  while (pHP > 0 && eHP > 0 && round <= 20) {
+  let pHP = 100, eHP = 100;
+  while (pHP > 0 && eHP > 0 && log.length < 20) {
     let pDmg = Math.max(5, player.stats.strength * 3 + player.stats.agility - enemy.stats.agility + Math.floor(Math.random()*6));
     if (Math.random() < 0.15) log.push({attacker: player.name, target: enemy.name, dodge: true});
     else { eHP -= pDmg; log.push({attacker: player.name, target: enemy.name, damage: pDmg}); }
@@ -282,34 +282,45 @@ function simulateBattle(player, enemy) {
     let eDmg = Math.max(5, enemy.stats.strength * 3 + enemy.stats.agility - player.stats.agility + Math.floor(Math.random()*6));
     if (Math.random() < 0.15) log.push({attacker: enemy.name, target: player.name, dodge: true});
     else { pHP -= eDmg; log.push({attacker: enemy.name, target: player.name, damage: eDmg}); }
-    round++;
   }
-  const playerWon = eHP <= 0;
-  return { log, playerWon };
+  return { log, playerWon: eHP <= 0 };
 }
 
 function drawMiniCharacter(ctx, char, x, y) {
-  const s = 0.4;
+  const s = 0.5;
+  // голова
   ctx.fillStyle = '#f1c27d';
-  ctx.beginPath(); ctx.arc(x, y, 20*s, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = '#333'; ctx.lineWidth = 2*s; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y-15, 18*s, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+  // глаза
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x-5, y-20, 4*s, 0, Math.PI, false); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+5, y-20, 4*s, 0, Math.PI, false); ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(x-5, y-20, 2*s, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x+5, y-20, 2*s, 0, Math.PI*2); ctx.fill();
+  // тело
   ctx.fillStyle = '#555';
-  ctx.fillRect(x-15*s, y+20*s, 30*s, 40*s);
-  ctx.font = `bold ${16*s}px "Segoe UI"`;
+  ctx.fillRect(x-15*s, y+5, 30*s, 40*s);
+  // имя
+  ctx.font = `bold ${14*s}px "Segoe UI"`;
   ctx.fillStyle = 'white';
   ctx.textAlign = 'center';
-  ctx.fillText(char.name, x, y-30*s);
+  ctx.fillText(char.name, x, y-35);
 }
 
 function renderBattlePage() {
   const canvas = document.getElementById('battleCanvas');
-  if (!canvas || !currentCharacter || !battleEnemy) return;
+  if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  drawMiniCharacter(ctx, currentCharacter, 80, 120);
-  drawMiniCharacter(ctx, battleEnemy, 300, 120);
-
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Рисуем персонажей только если они есть
+  if (currentCharacter && battleEnemy) {
+    drawMiniCharacter(ctx, currentCharacter, 80, 120);
+    drawMiniCharacter(ctx, battleEnemy, 320, 120);
+  }
+  
   ctx.font = 'bold 24px "Segoe UI"';
   ctx.fillStyle = '#f5a623';
   ctx.textAlign = 'center';
@@ -342,23 +353,25 @@ function animateBattleStep(playerWon) {
       : t('battle_log_hit', {attacker: action.attacker, damage: action.damage});
     logDiv.innerHTML += `<div>${msg}</div>`;
     logDiv.scrollTop = logDiv.scrollHeight;
-
+    
     const canvas = document.getElementById('battleCanvas');
-    const ctx = canvas.getContext('2d');
-    renderBattlePage();
-    const attackerX = action.attacker === currentCharacter.name ? 80 : 300;
-    ctx.fillStyle = 'rgba(255, 100, 100, 0.7)';
-    ctx.beginPath(); ctx.arc(attackerX, 120, 40, 0, Math.PI*2); ctx.fill();
-    if (action.attacker === currentCharacter.name) {
-      ctx.save();
-      ctx.translate(20, 0);
-      drawMiniCharacter(ctx, currentCharacter, 80, 120);
-      ctx.restore();
-    } else {
-      ctx.save();
-      ctx.translate(-20, 0);
-      drawMiniCharacter(ctx, battleEnemy, 300, 120);
-      ctx.restore();
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      renderBattlePage();
+      // вспышка
+      const attackerX = action.attacker === currentCharacter.name ? 80 : 320;
+      ctx.fillStyle = 'rgba(255, 200, 50, 0.6)';
+      ctx.beginPath(); ctx.arc(attackerX, 100, 30, 0, Math.PI*2); ctx.fill();
+      // сдвиг
+      if (action.attacker === currentCharacter.name) {
+        ctx.save(); ctx.translate(20, 0);
+        drawMiniCharacter(ctx, currentCharacter, 80, 120);
+        ctx.restore();
+      } else {
+        ctx.save(); ctx.translate(-20, 0);
+        drawMiniCharacter(ctx, battleEnemy, 320, 120);
+        ctx.restore();
+      }
     }
     battleAnimStep++;
     battleAnimTimer = setTimeout(() => animateBattleStep(playerWon), 500);
@@ -371,7 +384,8 @@ function animateBattleStep(playerWon) {
     if (playerWon) { progress.wins++; progress.rating += 25; }
     else { progress.losses++; progress.rating = Math.max(0, progress.rating - 15); }
     saveProgress(progress);
-    document.getElementById('createRating').textContent = progress.rating;
+    const ratingEl = document.getElementById('createRating');
+    if (ratingEl) ratingEl.textContent = progress.rating;
   }
 }
 
